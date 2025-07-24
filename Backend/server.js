@@ -1,50 +1,41 @@
-const express = require("express");
+// server.js
 const mongoose = require("mongoose");
-const cors = require("cors");
-const dotenv = require("dotenv");
-const morgan = require("morgan");
+const app = require("./app");
+require("dotenv").config();
 
-const app = express();
-dotenv.config();
+const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGO_URI;
 
-// Ensure necessary environment variables are set
-if (!process.env.MONGO_URI || !process.env.PORT) {
-  console.error("Missing environment variables");
+// Ensure necessary env vars
+if (!MONGO_URI) {
+  console.error("Missing MONGO_URI environment variable");
   process.exit(1);
 }
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(morgan("dev")); // Optional: request logging
-
-// Routes
-const entryRoutes = require("./routes/entries");
-app.use("/api/entries", entryRoutes);
-
-// Connect DB and Start Server
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log("MongoDB connected");
-    app.listen(process.env.PORT, () => {
-      console.log(`Server running on http://localhost:${process.env.PORT}`);
+// MongoDB connect with retry
+const connectWithRetry = () => {
+  mongoose
+    .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => {
+      console.log("MongoDB connected");
+      app.listen(PORT, () => {
+        console.log(`Server running at http://localhost:${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error("MongoDB connection error:", err.message);
+      setTimeout(connectWithRetry, 5000); // Retry every 5 seconds
     });
-  })
-  .catch((err) => {
-    console.error("MongoDB connection error:", err.message);
-    process.exit(1); // Exit process if connection fails
-  });
+};
 
-// Graceful Shutdown
-process.on("SIGINT", async () => {
-  console.log("Shutting down server...");
+connectWithRetry();
+
+// Graceful shutdown
+const shutdown = async () => {
+  console.log("Shutting down...");
   await mongoose.disconnect();
   process.exit(0);
-});
+};
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: "Something went wrong!" });
-});
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
