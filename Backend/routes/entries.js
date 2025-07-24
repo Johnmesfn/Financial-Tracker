@@ -35,6 +35,11 @@ const entryValidationRules = [
   body("note").optional().isString().isLength({ max: 500 }).withMessage("Note must be less than 500 characters."),
 ];
 
+// Helper to clear trends cache
+const clearTrendsCache = () => {
+  trendsCache.flushAll();
+};
+
 // Create Entry
 router.post("/", entryValidationRules, async (req, res) => {
   const errors = validationResult(req);
@@ -43,6 +48,7 @@ router.post("/", entryValidationRules, async (req, res) => {
   try {
     const entry = new Entry(req.body);
     await entry.save();
+    clearTrendsCache(); // Clear cache here
     logger.info(`Entry created: ${entry._id}`);
     res.status(201).json(entry);
   } catch (err) {
@@ -169,6 +175,7 @@ router.put("/:id", entryValidationRules, async (req, res) => {
       { new: true }
     );
     if (!updated) return res.status(404).json({ error: "Entry not found" });
+    clearTrendsCache(); // Clear cache here
     logger.info(`Entry updated: ${updated._id}`);
     res.json(updated);
   } catch (err) {
@@ -186,6 +193,7 @@ router.delete("/:id", async (req, res) => {
       { new: true }
     );
     if (!deleted) return res.status(404).json({ error: "Entry not found" });
+    clearTrendsCache(); // Clear cache here
     logger.info(`Entry deleted: ${deleted._id}`);
     res.json({ success: true });
   } catch (err) {
