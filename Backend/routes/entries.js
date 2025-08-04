@@ -151,20 +151,28 @@ router.get("/trends", async (req, res) => {
 // Category breakdown - FIXED TO HANDLE BOTH INCOME AND EXPENSE
 router.get("/category-breakdown", async (req, res) => {
   try {
-    const { type = "expense" } = req.query; // Default to 'expense' if not provided
-
-    // Validate type parameter
-    if (type !== "income" && type !== "expense") {
-      return res.status(400).json({
-        error: "Type parameter must be either 'income' or 'expense'",
-      });
+    const { type } = req.query;
+    
+    // Create filter object
+    const filter = { isDeleted: false };
+    
+    // Only add type to filter if it's valid
+    if (type === 'income' || type === 'expense') {
+      filter.type = type;
+    } else {
+      // Default to expense if no valid type provided
+      filter.type = 'expense';
     }
-
+    
+    console.log(`Fetching category breakdown for type: ${filter.type}`); // Debug log
+    
     const result = await Entry.aggregate([
-      { $match: { type: type, isDeleted: false } },
+      { $match: filter },
       { $group: { _id: "$category", total: { $sum: "$amount" } } },
       { $sort: { total: -1 } },
     ]);
+    
+    console.log(`Found ${result.length} categories for ${filter.type}`); // Debug log
     res.json(result);
   } catch (err) {
     logger.error(`Breakdown error: ${err.message}`);
