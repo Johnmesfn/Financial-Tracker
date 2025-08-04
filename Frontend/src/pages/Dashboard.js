@@ -289,6 +289,7 @@ const Dashboard = () => {
     setLoading(true);
     setError(null);
     try {
+      // Fetch both income and expense categories separately
       const [
         summaryRes,
         trendsRes,
@@ -306,6 +307,10 @@ const Dashboard = () => {
         ),
         axios.get("http://localhost:5000/api/entries?limit=5"),
       ]);
+
+      console.log("Expense categories:", expenseBreakdownRes.data);
+      console.log("Income categories:", incomeBreakdownRes.data);
+
       setSummary(summaryRes.data);
 
       // Format trends data for the chart
@@ -327,8 +332,11 @@ const Dashboard = () => {
         return trendData;
       });
       setTrends(formattedTrends);
+
+      // Set both category types
       setExpenseCategories(expenseBreakdownRes.data);
       setIncomeCategories(incomeBreakdownRes.data);
+
       setTransactions(entriesRes.data.entries || []);
     } catch (err) {
       console.error("Dashboard load error:", err);
@@ -575,7 +583,9 @@ const Dashboard = () => {
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-full text-gray-500">
-                No expense category data available
+                {summary.expense > 0
+                  ? "No expense categories found"
+                  : "No expenses recorded yet"}
               </div>
             )}
           </ChartContainer>
@@ -625,7 +635,9 @@ const Dashboard = () => {
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-full text-gray-500">
-                No income category data available
+                {summary.income > 0
+                  ? "No income categories found"
+                  : "No income recorded yet"}
               </div>
             )}
           </ChartContainer>
