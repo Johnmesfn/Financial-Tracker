@@ -10,34 +10,51 @@ const entryRoutes = require("./routes/entries");
 
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Security headers
 app.use(helmet());
 
-// Logging setup using Winston
+// Enable CORS
+app.use(cors());
+
+// Parse JSON bodies
+app.use(express.json());
+
+// Winston logger setup (separate logger from server.js)
 const logger = winston.createLogger({
-  level: 'info',
+  level: "info",
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.printf(({ timestamp, level, message }) => {
+      return `${timestamp} ${level}: ${message}`;
+    })
+  ),
   transports: [
     new winston.transports.Console(),
-    new winston.transports.File({ filename: 'server.log' }),
+    new winston.transports.File({ filename: "logs/server.log" }),
   ],
 });
 
-// Stream morgan logs to winston
+// Use Morgan HTTP logger with Winston stream
 app.use(morgan("combined", {
   stream: {
     write: (msg) => logger.info(msg.trim()),
   },
 }));
 
-// Routes
+// API Routes
 app.use("/api/entries", entryRoutes);
 
-// Optional health check
-app.get("/api/health", (req, res) => res.send("Server is healthy"));
+// Health check route
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "Server is healthy" });
+});
 
-// Error handling middleware
+// 404 Not Found Handler
+app.use((req, res, next) => {
+  res.status(404).json({ error: "Route not found" });
+});
+
+// Global Error Handler
 app.use((err, req, res, next) => {
   logger.error(err.stack || err.message);
   res.status(500).json({ error: "Something went wrong!" });

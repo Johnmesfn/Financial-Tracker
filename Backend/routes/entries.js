@@ -6,6 +6,7 @@ const { body, validationResult } = require("express-validator");
 const rateLimit = require("express-rate-limit");
 const winston = require("winston");
 const NodeCache = require("node-cache");
+const { protect } = require("../middleware/auth"); // Import authentication middleware
 
 const trendsCache = new NodeCache();
 
@@ -26,6 +27,9 @@ router.use(
     message: "Too many requests from this IP, please try again later.",
   })
 );
+
+// Apply authentication to all entry routes
+router.use(protect);
 
 // Validation middleware
 const entryValidationRules = [
@@ -56,10 +60,14 @@ router.post("/", entryValidationRules, async (req, res) => {
     return res.status(400).json({ errors: errors.array() });
 
   try {
-    const entry = new Entry(req.body);
+    // Add user ID to the entry
+    const entry = new Entry({
+      ...req.body,
+      user: req.user.id
+    });
     await entry.save();
     clearTrendsCache(); // Clear cache here
-    logger.info(`Entry created: ${entry._id}`);
+    logger.info(`Entry created: ${entry._id} by user ${req.user.id}`);
     res.status(201).json(entry);
   } catch (err) {
     logger.error(`Create failed: ${err.message}`);
@@ -77,7 +85,12 @@ router.get("/", async (req, res) => {
     startdate,
     enddate,
   } = req.query;
-  const filter = { isDeleted: false };
+  
+  // Start with isDeleted: false and user: req.user.id
+  const filter = { 
+    isDeleted: false,
+    user: req.user.id
+  };
 
   if (type) filter.type = type;
   if (category) filter.category = category;
@@ -109,10 +122,14 @@ router.get("/", async (req, res) => {
 // Trends
 router.get("/trends", async (req, res) => {
   const { startdate, enddate, period = "month" } = req.query;
-  const match = { isDeleted: false };
-  const cacheKey = `trends-${startdate || "all"}-${enddate || "all"}-${period}`;
+  const cacheKey = `trends-${req.user.id}-${startdate || "all"}-${enddate || "all"}-${period}`;
 
   if (trendsCache.has(cacheKey)) return res.json(trendsCache.get(cacheKey));
+
+  const match = { 
+    isDeleted: false,
+    user: req.user.id
+  };
 
   if (startdate) match.date = { $gte: new Date(startdate) };
   if (enddate)
@@ -148,23 +165,21 @@ router.get("/trends", async (req, res) => {
   }
 });
 
-// Category breakdown - FIXED TO HANDLE BOTH INCOME AND EXPENSE
+// Category breakdown
 router.get("/category-breakdown", async (req, res) => {
   try {
     const { type } = req.query;
     
-    // Create filter object
-    const filter = { isDeleted: false };
+    // Create filter object with user ID
+    const filter = { 
+      isDeleted: false,
+      user: req.user.id
+    };
     
     // Only add type to filter if it's valid
     if (type === 'income' || type === 'expense') {
       filter.type = type;
-    } else {
-      // Default to expense if no valid type provided
-      filter.type = 'expense';
     }
-    
-    console.log(`Fetching category breakdown for type: ${filter.type}`); // Debug log
     
     const result = await Entry.aggregate([
       { $match: filter },
@@ -172,7 +187,6 @@ router.get("/category-breakdown", async (req, res) => {
       { $sort: { total: -1 } },
     ]);
     
-    console.log(`Found ${result.length} categories for ${filter.type}`); // Debug log
     res.json(result);
   } catch (err) {
     logger.error(`Breakdown error: ${err.message}`);
@@ -184,7 +198,7 @@ router.get("/category-breakdown", async (req, res) => {
 router.get("/summary", async (req, res) => {
   try {
     const summary = await Entry.aggregate([
-      { $match: { isDeleted: false } },
+      { $match: { isDeleted: false, user: req.user.id } },
       {
         $group: {
           _id: "$type",
@@ -214,14 +228,28 @@ router.put("/:id", entryValidationRules, async (req, res) => {
     return res.status(400).json({ errors: errors.array() });
 
   try {
-    const updated = await Entry.findOneAndUpdate(
-      { _id: req.params.id, isDeleted: false },
+    // Verify the entry exists and belongs to the user
+    const entry = await Entry.findOne({ 
+      _id: req.params.id, 
+      user: req.user.id,
+      isDeleted: false 
+    });
+
+    if (!entry) {
+      return res.status(404).json({ 
+        error: "Entry not found or you don't have permission to update it" 
+      });
+    }
+
+    // Update the entry
+    const updated = await Entry.findByIdAndUpdate(
+      req.params.id,
       req.body,
       { new: true }
     );
-    if (!updated) return res.status(404).json({ error: "Entry not found" });
+
     clearTrendsCache(); // Clear cache here
-    logger.info(`Entry updated: ${updated._id}`);
+    logger.info(`Entry updated: ${updated._id} by user ${req.user.id}`);
     res.json(updated);
   } catch (err) {
     logger.error(`Update failed: ${err.message}`);
@@ -232,14 +260,28 @@ router.put("/:id", entryValidationRules, async (req, res) => {
 // Soft delete
 router.delete("/:id", async (req, res) => {
   try {
-    const deleted = await Entry.findOneAndUpdate(
-      { _id: req.params.id, isDeleted: false },
+    // Verify the entry exists and belongs to the user
+    const entry = await Entry.findOne({ 
+      _id: req.params.id, 
+      user: req.user.id,
+      isDeleted: false 
+    });
+
+    if (!entry) {
+      return res.status(404).json({ 
+        error: "Entry not found or you don't have permission to delete it" 
+      });
+    }
+
+    // Soft delete the entry
+    const deleted = await Entry.findByIdAndUpdate(
+      req.params.id,
       { isDeleted: true },
       { new: true }
     );
-    if (!deleted) return res.status(404).json({ error: "Entry not found" });
+
     clearTrendsCache(); // Clear cache here
-    logger.info(`Entry deleted: ${deleted._id}`);
+    logger.info(`Entry deleted: ${deleted._id} by user ${req.user.id}`);
     res.json({ success: true });
   } catch (err) {
     logger.error(`Delete failed: ${err.message}`);

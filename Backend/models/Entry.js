@@ -1,4 +1,3 @@
-// models/Entry.js
 const mongoose = require("mongoose");
 
 const VALID_CATEGORIES = [
@@ -11,6 +10,11 @@ const VALID_CATEGORIES = [
 
 const entrySchema = new mongoose.Schema(
   {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
     type: {
       type: String,
       enum: ["income", "expense"],
@@ -74,7 +78,7 @@ entrySchema.pre("save", function (next) {
 });
 
 // Add compound index for efficient queries
-entrySchema.index({ type: 1, category: 1, date: -1, isDeleted: 1 });
+entrySchema.index({ user: 1, type: 1, category: 1, date: -1, isDeleted: 1 });
 
 module.exports = mongoose.model("Entry", entrySchema);
 module.exports.VALID_CATEGORIES = VALID_CATEGORIES;
