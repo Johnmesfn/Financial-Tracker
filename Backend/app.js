@@ -1,63 +1,89 @@
 // app.js
 const express = require("express");
-const cors = require("cors");
-const morgan = require("morgan");
-const winston = require("winston");
-const helmet = require("helmet");
-require("dotenv").config();
-
-const entryRoutes = require("./routes/entries");
-
 const app = express();
+const mongoose = require("mongoose");
+const winston = require("winston");
 
-// Security headers
-app.use(helmet());
-
-// Enable CORS
-app.use(cors());
-
-// Parse JSON bodies
-app.use(express.json());
-
-// Winston logger setup (separate logger from server.js)
+// Create logger
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
     winston.format.timestamp(),
-    winston.format.printf(({ timestamp, level, message }) => {
-      return `${timestamp} ${level}: ${message}`;
-    })
+    winston.format.json()
   ),
   transports: [
     new winston.transports.Console(),
-    new winston.transports.File({ filename: "logs/server.log" }),
+    new winston.transports.File({ filename: "logs/app.log" }),
   ],
 });
 
-// Use Morgan HTTP logger with Winston stream
-app.use(morgan("combined", {
-  stream: {
-    write: (msg) => logger.info(msg.trim()),
-  },
-}));
+// Body parser
+app.use(express.json());
 
-// API Routes
-app.use("/api/entries", entryRoutes);
-
-// Health check route
-app.get("/api/health", (req, res) => {
-  res.status(200).json({ status: "Server is healthy" });
-});
-
-// 404 Not Found Handler
+// Enable CORS
 app.use((req, res, next) => {
-  res.status(404).json({ error: "Route not found" });
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, x-auth-token"
+  );
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  next();
 });
 
-// Global Error Handler
+// Database connection test endpoint
+app.get("/api/db-test", async (req, res) => {
+  try {
+    const state = mongoose.connection.readyState;
+    const states = ["disconnected", "connected", "connecting", "disconnecting"];
+
+    logger.info("Database test endpoint accessed", {
+      connectionState: states[state],
+      hasCollections: await mongoose.connection.db.listCollections().hasNext(),
+    });
+
+    res.json({
+      success: true,
+      dbState: states[state],
+      hasCollections: await mongoose.connection.db.listCollections().hasNext(),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.error("Database test failed", {
+      message: err.message,
+      stack: err.stack,
+    });
+
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+});
+
+// Routes
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/entries", require("./routes/entries"));
+
+// Error handling middleware
 app.use((err, req, res, next) => {
-  logger.error(err.stack || err.message);
-  res.status(500).json({ error: "Something went wrong!" });
+  logger.error("Server error", {
+    message: err.message,
+    stack: err.stack,
+    path: req.path,
+  });
+
+  res.status(500).json({
+    success: false,
+    message: err.message || "Internal server error",
+    debug:
+      process.env.NODE_ENV === "development"
+        ? {
+            stack: err.stack,
+            path: req.path,
+          }
+        : "🥞",
+  });
 });
 
 module.exports = app;
