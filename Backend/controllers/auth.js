@@ -1,4 +1,3 @@
-// controllers/auth.js
 const asyncHandler = require("express-async-handler");
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
@@ -24,6 +23,16 @@ exports.register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
 
   logger.info("📝 Registration attempt", { email });
+
+  // Check if user already exists - THIS IS THE CRITICAL FIX
+  const existingUser = await User.findOne({ email });
+  if (existingUser) {
+    logger.warn("❌ Registration failed - email already exists", { email });
+    return res.status(400).json({
+      success: false,
+      message: "Email is already registered"
+    });
+  }
 
   // Create user
   const user = await User.create({
