@@ -33,3 +33,4 @@ Frontend/.env
 # Backend-specific folders/files
 Backend/node_modules
 Backend/.env
+Backend/logs
