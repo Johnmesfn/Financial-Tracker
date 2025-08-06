@@ -7,7 +7,7 @@ const rateLimit = require("express-rate-limit");
 const winston = require("winston");
 const NodeCache = require("node-cache");
 const { protect } = require("../middleware/auth");
-const mongoose = require("mongoose"); // Added this import
+const mongoose = require("mongoose");
 const trendsCache = new NodeCache();
 
 // Winston logger
@@ -19,14 +19,32 @@ const logger = winston.createLogger({
   ],
 });
 
-// Rate limit
-router.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: "Too many requests from this IP, please try again later.",
-  })
-);
+// Create a more permissive rate limiter for dashboard routes
+const dashboardRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // Higher limit for dashboard routes
+  message: "Too many requests from this IP, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Standard rate limiter for other routes
+const standardRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300, // Standard limit for other routes
+  message: "Too many requests from this IP, please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply standard rate limiting to all entry routes by default
+router.use(standardRateLimit);
+
+// Apply more permissive rate limiting to dashboard routes
+// These routes are called when refreshing the dashboard
+router.get("/summary", dashboardRateLimit);
+router.get("/trends", dashboardRateLimit);
+router.get("/category-breakdown", dashboardRateLimit);
 
 // Apply authentication to all entry routes
 router.use(protect);
@@ -62,7 +80,7 @@ router.post("/", entryValidationRules, async (req, res) => {
     // Add user ID to the entry
     const entry = new Entry({
       ...req.body,
-      user: req.user.id
+      user: req.user.id,
     });
     await entry.save();
     clearTrendsCache(); // Clear cache here
@@ -84,11 +102,10 @@ router.get("/", async (req, res) => {
     startdate,
     enddate,
   } = req.query;
-  
   // Start with isDeleted: false and user: req.user.id
-  const filter = { 
+  const filter = {
     isDeleted: false,
-    user: req.user.id
+    user: req.user.id,
   };
   if (type) filter.type = type;
   if (category) filter.category = category;
@@ -118,13 +135,14 @@ router.get("/", async (req, res) => {
 // Trends
 router.get("/trends", async (req, res) => {
   const { startdate, enddate, period = "month" } = req.query;
-  const cacheKey = `trends-${req.user.id}-${startdate || "all"}-${enddate || "all"}-${period}`;
+  const cacheKey = `trends-${req.user.id}-${startdate || "all"}-${
+    enddate || "all"
+  }-${period}`;
   if (trendsCache.has(cacheKey)) return res.json(trendsCache.get(cacheKey));
-  
   // FIXED: Convert user ID to ObjectId
-  const match = { 
+  const match = {
     isDeleted: false,
-    user: new mongoose.Types.ObjectId(req.user.id)
+    user: new mongoose.Types.ObjectId(req.user.id),
   };
   if (startdate) match.date = { $gte: new Date(startdate) };
   if (enddate)
@@ -162,24 +180,20 @@ router.get("/trends", async (req, res) => {
 router.get("/category-breakdown", async (req, res) => {
   try {
     const { type } = req.query;
-    
     // FIXED: Convert user ID to ObjectId
-    const filter = { 
+    const filter = {
       isDeleted: false,
-      user: new mongoose.Types.ObjectId(req.user.id)
+      user: new mongoose.Types.ObjectId(req.user.id),
     };
-    
     // Only add type to filter if it's valid
-    if (type === 'income' || type === 'expense') {
+    if (type === "income" || type === "expense") {
       filter.type = type;
     }
-    
     const result = await Entry.aggregate([
       { $match: filter },
       { $group: { _id: "$category", total: { $sum: "$amount" } } },
       { $sort: { total: -1 } },
     ]);
-    
     res.json(result);
   } catch (err) {
     logger.error(`Breakdown error: ${err.message}`);
@@ -192,10 +206,12 @@ router.get("/summary", async (req, res) => {
   try {
     // FIXED: Convert user ID to ObjectId
     const summary = await Entry.aggregate([
-      { $match: { 
-        isDeleted: false, 
-        user: new mongoose.Types.ObjectId(req.user.id) 
-      }},
+      {
+        $match: {
+          isDeleted: false,
+          user: new mongoose.Types.ObjectId(req.user.id),
+        },
+      },
       {
         $group: {
           _id: "$type",
@@ -223,22 +239,20 @@ router.put("/:id", entryValidationRules, async (req, res) => {
     return res.status(400).json({ errors: errors.array() });
   try {
     // Verify the entry exists and belongs to the user
-    const entry = await Entry.findOne({ 
-      _id: req.params.id, 
+    const entry = await Entry.findOne({
+      _id: req.params.id,
       user: req.user.id,
-      isDeleted: false 
+      isDeleted: false,
     });
     if (!entry) {
-      return res.status(404).json({ 
-        error: "Entry not found or you don't have permission to update it" 
+      return res.status(404).json({
+        error: "Entry not found or you don't have permission to update it",
       });
     }
     // Update the entry
-    const updated = await Entry.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
+    const updated = await Entry.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
     clearTrendsCache(); // Clear cache here
     logger.info(`Entry updated: ${updated._id} by user ${req.user.id}`);
     res.json(updated);
@@ -252,14 +266,14 @@ router.put("/:id", entryValidationRules, async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     // Verify the entry exists and belongs to the user
-    const entry = await Entry.findOne({ 
-      _id: req.params.id, 
+    const entry = await Entry.findOne({
+      _id: req.params.id,
       user: req.user.id,
-      isDeleted: false 
+      isDeleted: false,
     });
     if (!entry) {
-      return res.status(404).json({ 
-        error: "Entry not found or you don't have permission to delete it" 
+      return res.status(404).json({
+        error: "Entry not found or you don't have permission to delete it",
       });
     }
     // Soft delete the entry
