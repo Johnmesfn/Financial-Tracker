@@ -9,7 +9,6 @@ const NodeCache = require("node-cache");
 const { protect } = require("../middleware/auth");
 const mongoose = require("mongoose");
 const trendsCache = new NodeCache();
-
 // Winston logger
 const logger = winston.createLogger({
   level: "info",
@@ -18,7 +17,6 @@ const logger = winston.createLogger({
     new winston.transports.File({ filename: "app.log" }),
   ],
 });
-
 // Create a more permissive rate limiter for dashboard routes
 const dashboardRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -27,7 +25,6 @@ const dashboardRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
 // Standard rate limiter for other routes
 const standardRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -36,16 +33,8 @@ const standardRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
 // Apply standard rate limiting to all entry routes by default
 router.use(standardRateLimit);
-
-// Apply more permissive rate limiting to dashboard routes
-// These routes are called when refreshing the dashboard
-router.get("/summary", dashboardRateLimit);
-router.get("/trends", dashboardRateLimit);
-router.get("/category-breakdown", dashboardRateLimit);
-
 // FIXED: Apply authentication to all entry routes except OPTIONS
 router.use((req, res, next) => {
   if (req.method === 'OPTIONS') {
@@ -53,7 +42,6 @@ router.use((req, res, next) => {
   }
   protect(req, res, next);
 });
-
 // Validation middleware
 const entryValidationRules = [
   body("amount")
@@ -70,12 +58,10 @@ const entryValidationRules = [
     .isLength({ max: 500 })
     .withMessage("Note must be less than 500 characters."),
 ];
-
 // Helper to clear trends cache
 const clearTrendsCache = () => {
   trendsCache.flushAll();
 };
-
 // Create Entry
 router.post("/", entryValidationRules, async (req, res) => {
   const errors = validationResult(req);
@@ -96,7 +82,6 @@ router.post("/", entryValidationRules, async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
-
 // Get all entries (paginated + filtered)
 router.get("/", async (req, res) => {
   const {
@@ -139,9 +124,8 @@ router.get("/", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// Trends
-router.get("/trends", async (req, res) => {
+// Trends - FIXED: Combined with middleware
+router.get("/trends", dashboardRateLimit, async (req, res) => {
   const { startdate, enddate, period = "month" } = req.query;
   const cacheKey = `trends-${req.user.id}-${startdate || "all"}-${
     enddate || "all"
@@ -187,9 +171,8 @@ router.get("/trends", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// Category breakdown
-router.get("/category-breakdown", async (req, res) => {
+// Category breakdown - FIXED: Combined with middleware
+router.get("/category-breakdown", dashboardRateLimit, async (req, res) => {
   try {
     const { type } = req.query;
     // FIXED: Convert user ID to ObjectId
@@ -214,9 +197,8 @@ router.get("/category-breakdown", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// Summary
-router.get("/summary", async (req, res) => {
+// Summary - FIXED: Combined with middleware
+router.get("/summary", dashboardRateLimit, async (req, res) => {
   try {
     // FIXED: Convert user ID to ObjectId
     const summary = await Entry.aggregate([
@@ -247,7 +229,6 @@ router.get("/summary", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 // Update
 router.put("/:id", entryValidationRules, async (req, res) => {
   const errors = validationResult(req);
@@ -281,7 +262,6 @@ router.put("/:id", entryValidationRules, async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
-
 // Soft delete
 router.delete("/:id", async (req, res) => {
   try {
@@ -313,5 +293,4 @@ router.delete("/:id", async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
-
 module.exports = router;
