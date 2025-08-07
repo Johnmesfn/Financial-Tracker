@@ -2,7 +2,7 @@ import axios from "axios";
 
 // Create axios instance
 const api = axios.create({
-  baseURL: "https://financial-tracker-bykx.onrender.com/api",
+  baseURL: "https://financial-tracker-backend-vuwr.onrender.com/api",
   withCredentials: true, // Allow cookies to be sent with requests
   headers: {
     "Content-Type": "application/json",

@@ -66,12 +66,11 @@ app.get("/api/db-test", async (req, res) => {
   }
 });
 
-app.use ((req , res , next) => {
+app.use((req, res, next) => {
   // Skip authentication for OPTIONS requests
   if (req.method === 'OPTIONS') {
     return next();
   }
-
   // For other requests, check for token 
   const token = req.header("x-auth-token");
   if (!token && req.path.startsWith("/api/entries")){
