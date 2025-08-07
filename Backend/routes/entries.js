@@ -46,10 +46,10 @@ router.get("/summary", dashboardRateLimit);
 router.get("/trends", dashboardRateLimit);
 router.get("/category-breakdown", dashboardRateLimit);
 
-// Apply authentication to all entry routes except OPTIONS
+// FIXED: Apply authentication to all entry routes except OPTIONS
 router.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    return next();
+  if (req.method === 'OPTIONS') {
+    return next(); // Skip authentication for OPTIONS requests
   }
   protect(req, res, next);
 });
@@ -107,11 +107,13 @@ router.get("/", async (req, res) => {
     startdate,
     enddate,
   } = req.query;
+  
   // Start with isDeleted: false and user: req.user.id
   const filter = {
     isDeleted: false,
     user: req.user.id,
   };
+  
   if (type) filter.type = type;
   if (category) filter.category = category;
   if (startdate || enddate) {
@@ -119,6 +121,7 @@ router.get("/", async (req, res) => {
     if (startdate) filter.date.$gte = new Date(startdate + "T00:00:00Z");
     if (enddate) filter.date.$lte = new Date(enddate + "T23:59:59Z");
   }
+  
   try {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const [entries, total] = await Promise.all([
@@ -143,15 +146,19 @@ router.get("/trends", async (req, res) => {
   const cacheKey = `trends-${req.user.id}-${startdate || "all"}-${
     enddate || "all"
   }-${period}`;
+  
   if (trendsCache.has(cacheKey)) return res.json(trendsCache.get(cacheKey));
+  
   // FIXED: Convert user ID to ObjectId
   const match = {
     isDeleted: false,
     user: new mongoose.Types.ObjectId(req.user.id),
   };
+  
   if (startdate) match.date = { $gte: new Date(startdate) };
   if (enddate)
     match.date = { ...match.date, $lte: new Date(enddate + "T23:59:59Z") };
+  
   try {
     const format = period === "day" ? "%Y-%m-%d" : "%Y-%m";
     const trends = await Entry.aggregate([
@@ -190,10 +197,12 @@ router.get("/category-breakdown", async (req, res) => {
       isDeleted: false,
       user: new mongoose.Types.ObjectId(req.user.id),
     };
+    
     // Only add type to filter if it's valid
     if (type === "income" || type === "expense") {
       filter.type = type;
     }
+    
     const result = await Entry.aggregate([
       { $match: filter },
       { $group: { _id: "$category", total: { $sum: "$amount" } } },
@@ -224,12 +233,14 @@ router.get("/summary", async (req, res) => {
         },
       },
     ]);
+    
     let income = 0,
       expense = 0;
     summary.forEach((item) => {
       if (item._id === "income") income = item.total;
       if (item._id === "expense") expense = item.total;
     });
+    
     res.json({ income, expense, balance: income - expense });
   } catch (err) {
     logger.error(`Summary error: ${err.message}`);
@@ -242,6 +253,7 @@ router.put("/:id", entryValidationRules, async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty())
     return res.status(400).json({ errors: errors.array() });
+    
   try {
     // Verify the entry exists and belongs to the user
     const entry = await Entry.findOne({
@@ -249,15 +261,18 @@ router.put("/:id", entryValidationRules, async (req, res) => {
       user: req.user.id,
       isDeleted: false,
     });
+    
     if (!entry) {
       return res.status(404).json({
         error: "Entry not found or you don't have permission to update it",
       });
     }
+    
     // Update the entry
     const updated = await Entry.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
     });
+    
     clearTrendsCache(); // Clear cache here
     logger.info(`Entry updated: ${updated._id} by user ${req.user.id}`);
     res.json(updated);
@@ -276,17 +291,20 @@ router.delete("/:id", async (req, res) => {
       user: req.user.id,
       isDeleted: false,
     });
+    
     if (!entry) {
       return res.status(404).json({
         error: "Entry not found or you don't have permission to delete it",
       });
     }
+    
     // Soft delete the entry
     const deleted = await Entry.findByIdAndUpdate(
       req.params.id,
       { isDeleted: true },
       { new: true }
     );
+    
     clearTrendsCache(); // Clear cache here
     logger.info(`Entry deleted: ${deleted._id} by user ${req.user.id}`);
     res.json({ success: true });
