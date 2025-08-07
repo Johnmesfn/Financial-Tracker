@@ -2,7 +2,7 @@ import axios from "axios";
 
 // Create axios instance
 const api = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: "https://financial-tracker-bykx.onrender.com/api",
 });
 
 // Function to delay execution (for retry logic)
