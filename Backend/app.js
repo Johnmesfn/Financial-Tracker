@@ -23,7 +23,7 @@ app.use(express.json());
 
 // Configure CORS Option
 const corsOptions = {
-  origin: 'https://financial-tracker-frontend-nvwp.onrender.com', // Your frontend URL
+  origin: 'https://financial-tracker-ysq5.onrender.com', // Your frontend URL
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization'],
   credentials: true, // Allow credentials
