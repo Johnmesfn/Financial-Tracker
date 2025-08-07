@@ -3,6 +3,7 @@ const express = require("express");
 const app = express();
 const mongoose = require("mongoose");
 const winston = require("winston");
+const cors = require("cors");
 
 // Create logger
 const logger = winston.createLogger({
@@ -20,16 +21,20 @@ const logger = winston.createLogger({
 // Body parser
 app.use(express.json());
 
-// Enable CORS
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Origin, X-Requested-With, Content-Type, Accept, x-auth-token"
-  );
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  next();
-});
+// Configure CORS Option
+const corsOptions = {
+  origin: 'https://financial-tracker-frontend-nvwp.onrender.com', // Your frontend URL
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization'],
+  credentials: true, // Allow credentials
+  optionsSuccessStatus: 200 // For legacy browser support
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
+// Explicit preflight handling for OPTIONS method
+app.options("*", cors(corsOptions));
 
 // Database connection test endpoint
 app.get("/api/db-test", async (req, res) => {
@@ -59,6 +64,26 @@ app.get("/api/db-test", async (req, res) => {
       error: err.message,
     });
   }
+});
+
+app.use ((req , res , next) => {
+  // Skip authentication for OPTIONS requests
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+
+  // For other requests, check for token 
+  const token = req.header("x-auth-token");
+  if (!token && req.path.startsWith("/api/entries")){
+    return res.status(401).json({
+      success: false,
+      message: "No authentication token provided",
+      debug: {
+        requiredHeader: "x-auth-token",
+      },
+    });
+  }
+  next();
 });
 
 // Routes

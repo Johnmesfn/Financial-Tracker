@@ -46,8 +46,13 @@ router.get("/summary", dashboardRateLimit);
 router.get("/trends", dashboardRateLimit);
 router.get("/category-breakdown", dashboardRateLimit);
 
-// Apply authentication to all entry routes
-router.use(protect);
+// Apply authentication to all entry routes except OPTIONS
+router.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return next();
+  }
+  protect(req, res, next);
+});
 
 // Validation middleware
 const entryValidationRules = [
