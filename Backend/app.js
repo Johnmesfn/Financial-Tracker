@@ -4,6 +4,7 @@ const app = express();
 const mongoose = require("mongoose");
 const winston = require("winston");
 const cors = require("cors");
+const path = require("path");
 
 // Create logger
 const logger = winston.createLogger({
@@ -89,6 +90,38 @@ app.use((req, res, next) => {
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/entries", require("./routes/entries"));
 
+//Serve static files from the React app
+app.use(express.static(path.join(__dirname, "..", "Frontend", "build")));
+
+// The "catchall" handler: for any request that doesn't match one above, send back React's index.html file.
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "Frontend", "build", "index.html"), (err) => {
+    if (err) {
+      logger.error("Error serving index.html", {
+        message: err.message,
+        stack: err.stack,
+      });
+
+      if (err.code === "ENOENT") {
+        return res.status(404).send(`
+          <div>
+            <h1>Application not Configured Correctly</h1>
+            <p>The build folder can not be found at: ${indexPath})}</p>
+            <p>Please ensure the react app has been built.</p>
+          </div>
+        `);
+    }
+
+    res.status(500).send(`
+      <div>
+        <h1>Application Error</h1>
+        <p>${err.message}</p>
+        <p>${err.stack}</p>
+      </div>
+    `);
+    }
+  });
+});
 // Error handling middleware
 app.use((err, req, res, next) => {
   logger.error("Server error", {
