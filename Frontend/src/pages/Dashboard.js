@@ -16,11 +16,13 @@ import AddEntryModal from "../components/AddEntryModal";
 import SummaryCards from "../components/SummaryCards";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { formatCurrency } from "../utils/format";
+import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const checkMobile = () => {
@@ -134,7 +136,7 @@ const Dashboard = () => {
             Recent Transactions
           </h2>
           <button
-            onClick={() => (window.location.href = "/transaction")}
+            onClick={() => navigate("/transaction")}
             className="text-cyan-600 hover:text-cyan-800 font-medium flex items-center gap-1"
           >
             View All <FiArrowRight />
