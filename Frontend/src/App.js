@@ -14,6 +14,7 @@ import Settings from "./pages/Settings";
 import AddEntryModal from "./components/AddEntryModal";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword"; // ← added
 import LoadingSpinner from "./components/LoadingSpinner";
 
 // Protected Route component
@@ -165,6 +166,14 @@ function App() {
                 element={
                   <PublicRoute>
                     <Register />
+                  </PublicRoute>
+                }
+              />
+              <Route
+                path="/forgot-password" // ← added
+                element={
+                  <PublicRoute>
+                    <ForgotPassword />
                   </PublicRoute>
                 }
               />
